@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Company Map</title>
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <!-- Marker clustering -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+  />
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- SheetJS (read Excel in-browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-dot"></div>
+      <div>
+        <div class="title">Company Map</div>
+        <div class="subtitle">Powered by an Excel file in your repo</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btnReload" class="btn">Reload data</button>
+      <button id="btnClearCache" class="btn btn-secondary" title="Clears geocoding cache stored in this browser">
+        Clear geocode cache
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="panel">
+        <h2>How to use</h2>
+        <ul class="help">
+          <li><b>Click a marker</b> to see all row details.</li>
+          <li>Use <b>Filters</b> to show only matching companies.</li>
+          <li>Update <code>data/companies.xlsx</code> to update the map.</li>
+          <li>First load may take longer (geocoding). Next loads are faster.</li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Filters</h2>
+          <button id="btnResetFilters" class="link">Reset</button>
+        </div>
+
+        <div class="search-row">
+          <input id="globalSearch" class="input" placeholder="Search any field…" />
+        </div>
+
+        <div id="filters" class="filters"></div>
+      </div>
+
+      <div class="panel stats">
+        <div class="stat">
+          <div class="stat-label">Rows loaded</div>
+          <div id="rowsLoaded" class="stat-value">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Shown on map</div>
+          <div id="rowsShown" class="stat-value">—</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="map-wrap">
+      <div id="map"></div>
+
+      <div id="toast" class="toast hidden"></div>
+
+      <div class="legend" id="legend">
+        <div class="legend-title">Legend</div>
+        <div id="legendItems" class="legend-items"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
