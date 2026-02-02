@@ -4,15 +4,17 @@
  */
 
 :root {
-  --primary: #c5101a; /* DTU red */
-  --secondary: #ffffff; /* white */
-  --background: #f7f7f7; /* light grey for page background */
-  --text: #1a1a1a; /* nearly black text */
-  --muted: #666666; /* muted grey */
-  --border: #e0e0e0; /* subtle border colour */
+  /* Pastel palette inspired by wind maps */
+  --primary: #5daee5; /* pastel blue for nav and accents */
+  --secondary: #ffffff; /* white text on nav */
+  --accent: #a1d8b0; /* pastel green secondary accent */
+  --background: #f5f9fc; /* very light blue background */
+  --text: #303030; /* dark grey text for readability */
+  --muted: #6a7180; /* muted grey */
+  --border: #dde6f2; /* soft border colour */
   --card-bg: #ffffff; /* panels and cards */
-  --shadow: 0 2px 8px rgba(0,0,0,0.1);
-  --radius: 10px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  --radius: 12px;
 }
 
 html, body {
@@ -247,42 +249,7 @@ html, body {
 }
 
 /* Legend overlay */
-.legend {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 10px 12px;
-  min-width: 160px;
-  z-index: 20;
-  pointer-events: auto;
-}
-.legend-title {
-  font-size: 12px;
-  font-weight: 700;
-  margin-bottom: 6px;
-  color: var(--primary);
-}
-.legend-items {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.legend-item {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  gap: 6px;
-}
-.legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid #cccccc;
-}
+/* Legend styles are now part of the sidebar panel. */
 
 /* Info box */
 .infobox {
@@ -323,6 +290,26 @@ html, body {
   font-size: 13px;
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+/* Legend inside sidebar */
+.legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
 }
 
 /* Toast message */

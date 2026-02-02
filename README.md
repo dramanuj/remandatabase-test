@@ -1,13 +1,13 @@
 # Company Globe Map
 
-This project is a lightweight static web application for visualising company data on an interactive **3D globe**. Data is read from an Excel file (`data/companies.xlsx`) and plotted on the globe with colour‑coded markers according to company type. Users can filter by any column, perform a global search across all fields, and click on markers to reveal detailed information.
+This project is a lightweight static web application for visualising company data on an interactive **3D globe**.  The AngularJS edition introduces data binding and a cleaner, pastel‑themed interface inspired by wind maps.  Data is read from an Excel file (`data/companies.xlsx`) and plotted on the globe with colour‑coded markers according to company type.  Users can filter by any column, perform a global search across all fields, and click on markers to reveal detailed information.
 
 ## Features
 
 - **3D Globe visualisation** using [Globe.gl](https://globe.gl/) and ThreeJS for smooth zooming and panning.
 - **Excel integration** via [SheetJS](https://sheetjs.com/): update the `companies.xlsx` file to change the map data without touching the code.
 - **Dynamic filters** automatically generated from the data columns. Filter by any column values using dropdowns, or search across all fields.
-- **Accessible modern UI** inspired by DTU colours (red and white), with a collapsible sidebar, clear legend, and responsive design.
+- **Pastel‑themed UI** inspired by wind maps, with a collapsible sidebar (collapsed by default), a legend integrated into the sidebar, and a minimal design that keeps attention on the globe.
 - **Client‑side geocoding** using the OpenStreetMap Nominatim API, with localStorage caching to improve subsequent loads. If your Excel file already contains `Latitude` and `Longitude` columns, they will be used directly, bypassing geocoding.
 
 ## Getting started

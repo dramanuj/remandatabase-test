@@ -10,15 +10,17 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Globe.gl: ThreeJS‑powered interactive globe -->
     <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+    <!-- AngularJS for app structure and bindings -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
 
     <!-- Styles -->
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body ng-app="companyMapApp" ng-controller="MapController as vm">
     <!-- Top navigation bar -->
     <header class="navbar">
       <div class="nav-content">
-        <button id="menuToggle" class="menu-btn" aria-label="Toggle filters">☰</button>
+        <button id="menuToggle" class="menu-btn" aria-label="Toggle filters" ng-click="vm.toggleSidebar()">☰</button>
         <div class="logo-dot"></div>
         <span class="brand-title">Company Globe Map</span>
       </div>
@@ -26,8 +28,8 @@
 
     <!-- Main layout: sidebar + globe -->
     <div class="main">
-      <!-- Collapsible sidebar for filters and help -->
-      <aside id="sidebar" class="sidebar collapsed" aria-label="Filters panel">
+      <!-- Collapsible sidebar for filters, legend and help -->
+      <aside id="sidebar" class="sidebar" ng-class="{'collapsed': vm.sidebarCollapsed}" aria-label="Filters panel">
         <div class="panel">
           <h2>How to use</h2>
           <ul class="help">
@@ -40,21 +42,41 @@
         <div class="panel">
           <div class="panel-header">
             <h2>Filters</h2>
-            <button id="btnResetFilters" class="link" title="Reset all filters">Reset</button>
+            <button class="link" title="Reset all filters" ng-click="vm.resetFilters()">Reset</button>
           </div>
           <div class="search-row">
-            <input id="globalSearch" class="input" placeholder="Search any field…" aria-label="Global search" />
+            <input class="input" placeholder="Search any field…" aria-label="Global search" ng-model="vm.globalSearch" ng-change="vm.applyFilters()" />
           </div>
-          <div id="filters" class="filters"></div>
+          <!-- Dynamic filters -->
+          <div class="filters">
+            <div class="filter" ng-repeat="f in vm.filterDefs">
+              <label><span>{{f.name}}</span><span class="pill">{{f.values.length}}</span></label>
+              <select class="select" ng-model="vm.filters[f.name]" ng-change="vm.applyFilters()">
+                <option value="">All</option>
+                <option ng-repeat="v in f.values" value="{{v}}">{{v}}</option>
+              </select>
+            </div>
+          </div>
         </div>
+        <!-- Legend inside sidebar -->
+        <div class="panel" ng-if="vm.legendEntries && vm.legendEntries.length">
+          <h2>Legend</h2>
+          <div class="legend-items">
+            <div class="legend-item" ng-repeat="entry in vm.legendEntries">
+              <span class="legend-swatch" ng-style="{'background': entry.color}"></span>
+              <span>{{entry.type}}</span>
+            </div>
+          </div>
+        </div>
+        <!-- Stats -->
         <div class="panel stats">
           <div class="stat">
             <div class="stat-label">Rows loaded</div>
-            <div id="rowsLoaded" class="stat-value">—</div>
+            <div class="stat-value">{{vm.allRows.length || '—'}}</div>
           </div>
           <div class="stat">
             <div class="stat-label">Shown on map</div>
-            <div id="rowsShown" class="stat-value">—</div>
+            <div class="stat-value">{{vm.filteredRows.length || '—'}}</div>
           </div>
         </div>
       </aside>
@@ -62,15 +84,20 @@
       <!-- Globe container with overlays -->
       <div class="globe-container">
         <div id="globeViz"></div>
-        <!-- Legend: lists types and corresponding colours -->
-        <div id="legend" class="legend"></div>
         <!-- Info box: shows details of selected company -->
-        <div id="infobox" class="infobox hidden"></div>
+        <div class="infobox" ng-class="{'hidden': !vm.selectedRow}">
+          <div class="infobox-title" ng-if="vm.selectedRow">{{vm.selectedRow['Company Name'] || 'Company'}}</div>
+          <div class="infobox-entry" ng-repeat="(key, value) in vm.selectedRow" ng-if="value && key">
+            <div class="key">{{key}}</div>
+            <div class="value">{{value}}</div>
+          </div>
+        </div>
         <!-- Toast for status messages -->
         <div id="toast" class="toast hidden"></div>
       </div>
     </div>
 
+    <!-- Application script -->
     <script src="app.js"></script>
   </body>
 </html>
