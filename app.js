@@ -13,10 +13,9 @@ const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
    State
 ========================== */
 let map;
-let cluster;
+let markersLayer;
 let allRows = [];
 let filteredRows = [];
-let markersById = new Map();
 let columnNames = [];
 let filtersState = {}; // { colName: selectedValue }
 let globalSearchTerm = "";
@@ -49,11 +48,6 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function rowId(row, idx) {
-  // Stable-enough ID for a marker
-  return `${normalize(row["Company Name"])}|${normalize(row["City"])}|${normalize(row["Country"])}|${idx}`;
-}
-
 function saveGeocodeCache() {
   try {
     localStorage.setItem(geocodeCacheKey, JSON.stringify(geocodeCache));
@@ -77,44 +71,31 @@ function colorForType(type) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   const hue = h % 360;
-  return `hsl(${hue} 85% 60%)`;
-}
-
-function makeDotIcon(color) {
-  return L.divIcon({
-    className: "dot-marker",
-    html: `<div style="
-      width: 12px; height: 12px; border-radius: 999px;
-      background: ${color};
-      border: 2px solid rgba(255,255,255,0.85);
-      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    "></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8]
-  });
+  return `hsl(${hue} 85% 45%)`;
 }
 
 /* ==========================
-   Leaflet init
+   Leaflet init (Canvas renderer for smoother zoom)
 ========================== */
 function initMap() {
-  map = L.map("map", { worldCopyJump: true }).setView([20, 0], 2);
+  map = L.map("map", {
+    worldCopyJump: true,
+    preferCanvas: true
+  }).setView([20, 0], 2);
+
+  // Canvas renderer for vector layers (circle markers)
+  const canvasRenderer = L.canvas({ padding: 0.5 });
+  initMap._renderer = canvasRenderer;
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    updateWhenZooming: false,
+    updateWhenIdle: true,
+    keepBuffer: 2
   }).addTo(map);
 
-  cluster = L.markerClusterGroup({
-    maxClusterRadius: 42,
-    showCoverageOnHover: false
-  });
-  map.addLayer(cluster);
-
-  // CSS for divIcons
-  const style = document.createElement("style");
-  style.textContent = `.dot-marker { background: transparent; border: none; }`;
-  document.head.appendChild(style);
+  markersLayer = L.layerGroup().addTo(map);
 }
 
 /* ==========================
@@ -130,12 +111,11 @@ function parseExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = SHEET_NAME || workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  const json = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // keep empty cells
-  return json;
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
 }
 
 /* ==========================
-   Geocoding
+   Geocoding (cached)
 ========================== */
 function makeGeocodeKey(city, country) {
   return `${normalize(city).toLowerCase()}|${normalize(country).toLowerCase()}`;
@@ -147,11 +127,7 @@ async function geocodeCityCountry(city, country) {
   if (geocodeCache[key] === null) return null;
 
   const q = `${normalize(city)}, ${normalize(country)}`;
-  const params = new URLSearchParams({
-    q,
-    format: "json",
-    limit: "1"
-  });
+  const params = new URLSearchParams({ q, format: "json", limit: "1" });
 
   const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
     headers: {
@@ -169,10 +145,7 @@ async function geocodeCityCountry(city, country) {
     return null;
   }
 
-  const lat = parseFloat(data[0].lat);
-  const lon = parseFloat(data[0].lon);
-  const result = { lat, lon };
-
+  const result = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
   geocodeCache[key] = result;
   saveGeocodeCache();
   return result;
@@ -190,7 +163,6 @@ function buildFilters(rows) {
   filtersEl.innerHTML = "";
   filtersState = {};
 
-  // Build list of columns (from all keys across rows)
   const cols = new Set();
   for (const r of rows) Object.keys(r).forEach((k) => cols.add(k));
   columnNames = Array.from(cols);
@@ -258,7 +230,7 @@ function rowMatchesFilters(row) {
 }
 
 /* ==========================
-   Markers
+   Markers (Canvas circle markers)
 ========================== */
 function popupHtml(row) {
   const title = escapeHtml(normalize(row["Company Name"]) || "Company");
@@ -275,17 +247,17 @@ function popupHtml(row) {
     .join("");
 
   return `
-    <div style="min-width: 260px; max-width: 340px;">
-      <div style="font-weight:800; font-size:14px; margin-bottom:6px;">${title}</div>
-      <div style="font-size:12px; opacity:.85; margin-bottom:10px;">
-        <span style="font-weight:700;">${type}</span> · ${loc}
+    <div style="min-width: 260px; max-width: 360px;">
+      <div style="font-weight:950; font-size:14px; margin-bottom:6px;">${title}</div>
+      <div style="font-size:12px; opacity:.75; margin-bottom:10px;">
+        <span style="font-weight:900;">${type}</span> · ${loc}
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${items}
       </div>
       <style>
         .kv{display:flex; gap:10px; align-items:flex-start;}
-        .k{min-width: 110px; font-size:11px; opacity:.7;}
+        .k{min-width: 120px; font-size:11px; opacity:.65;}
         .v{font-size:12px;}
       </style>
     </div>
@@ -293,8 +265,7 @@ function popupHtml(row) {
 }
 
 function clearMarkers() {
-  cluster.clearLayers();
-  markersById.clear();
+  markersLayer.clearLayers();
 }
 
 function updateStats() {
@@ -323,11 +294,11 @@ function rebuildLegend(rows) {
 async function addMarkersForRows(rows) {
   clearMarkers();
 
-  // Rate limit: be gentle with geocoding
-  const GEOCODE_DELAY_MS = 800;
+  const GEOCODE_DELAY_MS = 650;
 
   let added = 0;
   let missing = 0;
+  const bounds = L.latLngBounds([]);
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -335,43 +306,40 @@ async function addMarkersForRows(rows) {
     const country = normalize(r["Country"]);
     const type = normalize(r["Company Type"]) || "Unknown";
 
-    if (!city || !country) {
-      missing++;
-      continue;
-    }
+    if (!city || !country) { missing++; continue; }
 
     const coords = await geocodeCityCountry(city, country);
-
-    if (!coords) {
-      missing++;
-      continue;
-    }
+    if (!coords) { missing++; continue; }
 
     const color = colorForType(type);
-    const marker = L.marker([coords.lat, coords.lon], {
-      icon: makeDotIcon(color),
-      title: normalize(r["Company Name"]) || `${city}, ${country}`
-    }).bindPopup(popupHtml(r), { maxWidth: 380 });
 
-    cluster.addLayer(marker);
+    const marker = L.circleMarker([coords.lat, coords.lon], {
+      renderer: initMap._renderer,
+      radius: 6,
+      weight: 2,
+      color: "#ffffff",
+      opacity: 0.9,
+      fillColor: color,
+      fillOpacity: 0.9
+    });
+
+    marker.bindPopup(popupHtml(r), { maxWidth: 420 });
+    marker.addTo(markersLayer);
+
+    bounds.extend([coords.lat, coords.lon]);
     added++;
 
-    // Delay every few requests to be polite; cached items return immediately.
-    if (i % 3 === 0) await sleep(GEOCODE_DELAY_MS);
+    if (i % 4 === 0) await sleep(GEOCODE_DELAY_MS);
   }
 
   updateStats();
 
-  if (added > 0) {
-    const bounds = cluster.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+  if (added > 0 && bounds.isValid()) {
+    map.fitBounds(bounds.pad(0.2));
   }
 
-  if (missing > 0) {
-    toast(`Added ${added} marker(s). ${missing} row(s) missing a location or couldn’t be geocoded.`);
-  } else {
-    toast(`Added ${added} marker(s).`);
-  }
+  if (missing > 0) toast(`Added ${added} marker(s). ${missing} row(s) missing a location or couldn’t be geocoded.`);
+  else toast(`Added ${added} marker(s).`);
 }
 
 /* ==========================
@@ -390,8 +358,7 @@ function applyFilters() {
 function validateColumns(rows) {
   const cols = new Set();
   for (const r of rows) Object.keys(r).forEach((k) => cols.add(k));
-  const missing = REQUIRED.filter((c) => !cols.has(c));
-  return missing;
+  return REQUIRED.filter((c) => !cols.has(c));
 }
 
 /* ==========================
@@ -413,23 +380,19 @@ async function loadAndRender() {
 
   buildFilters(allRows);
   rebuildLegend(allRows);
-
   updateStats();
-  toast("Geocoding and placing markers… first load may take a bit.");
+
+  toast("Placing markers… first load may take a moment.");
   await addMarkersForRows(allRows);
 }
 
 /* ==========================
-   Wire up events
+   Events
 ========================== */
 function initEvents() {
   document.getElementById("btnReload").addEventListener("click", async () => {
-    try {
-      await loadAndRender();
-    } catch (e) {
-      console.error(e);
-      toast(`Reload failed: ${e.message}`, 6000);
-    }
+    try { await loadAndRender(); }
+    catch (e) { console.error(e); toast(`Reload failed: ${e.message}`, 6000); }
   });
 
   document.getElementById("btnClearCache").addEventListener("click", () => {
@@ -450,6 +413,12 @@ function initEvents() {
     globalSearchTerm = normalize(e.target.value).toLowerCase();
     window.clearTimeout(initEvents._t);
     initEvents._t = window.setTimeout(applyFilters, 200);
+  });
+
+  const sidebar = document.getElementById("sidebar");
+  document.getElementById("btnToggleSidebar").addEventListener("click", () => {
+    sidebar.classList.toggle("is-collapsed");
+    setTimeout(() => map.invalidateSize(), 150);
   });
 }
 

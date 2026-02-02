@@ -1,4 +1,4 @@
-# Remanufacturing Database Map (Leaflet + Excel)
+# Company Map (Leaflet + Excel)
 
 A lightweight static web app you can host on **GitHub Pages**.
 
