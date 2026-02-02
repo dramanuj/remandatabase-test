@@ -1,61 +1,84 @@
+/*
+ * Interactive Company Globe Map
+ *
+ * This script loads an Excel file containing company information, geocodes
+ * locations to latitude/longitude coordinates if necessary, renders them on
+ * an interactive 3D globe using Globe.gl, and provides dynamic filtering
+ * controls. The UI is kept minimal and modern, with a collapsible sidebar
+ * and accessible colour palette inspired by DTU (red & white).
+ */
+
 /* ==========================
-   Config
+   Configuration
 ========================== */
 const EXCEL_URL = "data/companies.xlsx";
-const SHEET_NAME = null; // null => first sheet
 const REQUIRED = ["Company Name", "Company Type", "Country", "City"];
-
-// Nominatim (OpenStreetMap) geocoding endpoint.
-// Note: be mindful of rate limits; this app caches results in localStorage.
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
 /* ==========================
    State
 ========================== */
-let map;
-let markersLayer;
+let globe; // Globe.gl instance
 let allRows = [];
 let filteredRows = [];
-let columnNames = [];
-let filtersState = {}; // { colName: selectedValue }
+let filtersState = {}; // { columnName: selectedValue }
 let globalSearchTerm = "";
+let columnNames = [];
+let pointsData = []; // points for globe
 
-const geocodeCacheKey = "companyMap_geocodeCache_v1";
+// Load geocode cache from localStorage
+const geocodeCacheKey = "companyGlobe_geocodeCache_v1";
 let geocodeCache = loadGeocodeCache();
 
 /* ==========================
    Helpers
 ========================== */
+
+// Normalise a value to a trimmed string
+function normalize(v) {
+  return v === undefined || v === null ? "" : String(v).trim();
+}
+
+// Escape HTML for insertion into attributes/innerHTML
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Create a deterministic colour for a company type
+function colorForType(type) {
+  const s = normalize(type) || "Unknown";
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  const hue = hash % 360;
+  return `hsl(${hue}, 65%, 55%)`;
+}
+
+// Toast notification
 function toast(msg, ms = 3500) {
   const el = document.getElementById("toast");
   el.textContent = msg;
   el.classList.remove("hidden");
-  window.clearTimeout(toast._t);
-  toast._t = window.setTimeout(() => el.classList.add("hidden"), ms);
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.add("hidden"), ms);
 }
 
-function normalize(v) {
-  if (v === undefined || v === null) return "";
-  return String(v).trim();
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
+// Save geocode cache to localStorage
 function saveGeocodeCache() {
   try {
     localStorage.setItem(geocodeCacheKey, JSON.stringify(geocodeCache));
   } catch (e) {
-    console.warn("Could not save cache:", e);
+    console.warn("Geocode cache save failed", e);
   }
 }
 
+// Load geocode cache from localStorage
 function loadGeocodeCache() {
   try {
     const raw = localStorage.getItem(geocodeCacheKey);
@@ -65,221 +88,144 @@ function loadGeocodeCache() {
   }
 }
 
-function colorForType(type) {
-  // Deterministic color assignment by hashing the type string
-  const s = normalize(type) || "Unknown";
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  const hue = h % 360;
-  return `hsl(${hue} 85% 45%)`;
-}
-
-/* ==========================
-   Leaflet init (Canvas renderer for smoother zoom)
-========================== */
-function initMap() {
-  map = L.map("map", {
-    worldCopyJump: true,
-    preferCanvas: true
-  }).setView([20, 0], 2);
-
-  // Canvas renderer for vector layers (circle markers)
-  const canvasRenderer = L.canvas({ padding: 0.5 });
-  initMap._renderer = canvasRenderer;
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    updateWhenZooming: false,
-    updateWhenIdle: true,
-    keepBuffer: 2
-  }).addTo(map);
-
-  markersLayer = L.layerGroup().addTo(map);
-}
-
-/* ==========================
-   Excel loading
-========================== */
-async function fetchExcelArrayBuffer(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch Excel: ${res.status} ${res.statusText}`);
-  return await res.arrayBuffer();
-}
-
-function parseExcel(buffer) {
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheetName = SHEET_NAME || workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
-}
-
-/* ==========================
-   Geocoding (cached)
-========================== */
+// Generate a cache key for geocoding
 function makeGeocodeKey(city, country) {
   return `${normalize(city).toLowerCase()}|${normalize(country).toLowerCase()}`;
 }
 
+// Geocode city/country to lat/lng using Nominatim; returns { lat, lng } or null
 async function geocodeCityCountry(city, country) {
   const key = makeGeocodeKey(city, country);
-  if (geocodeCache[key]) return geocodeCache[key];
-  if (geocodeCache[key] === null) return null;
-
+  if (geocodeCache[key] !== undefined) {
+    return geocodeCache[key];
+  }
+  // Build query
   const q = `${normalize(city)}, ${normalize(country)}`;
   const params = new URLSearchParams({ q, format: "json", limit: "1" });
-
-  const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
-    headers: {
-      "Accept": "application/json",
-      "User-Agent": "company-map-github-pages (static demo)"
+  try {
+    const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
+      headers: {
+        "Accept": "application/json",
+        // Identify the application politely per Nominatim usage policy
+        "User-Agent": "company-globe-map (static demo)"
+      }
+    });
+    if (!res.ok) throw new Error(`Geocode failed: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+    let result = null;
+    if (Array.isArray(data) && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      result = { lat, lng: lon };
     }
-  });
-
-  if (!res.ok) throw new Error(`Geocode failed for "${q}" (${res.status})`);
-  const data = await res.json();
-
-  if (!Array.isArray(data) || data.length === 0) {
+    geocodeCache[key] = result;
+    saveGeocodeCache();
+    return result;
+  } catch (e) {
+    console.warn(`Geocode error for ${q}`, e);
     geocodeCache[key] = null;
     saveGeocodeCache();
     return null;
   }
-
-  const result = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-  geocodeCache[key] = result;
-  saveGeocodeCache();
-  return result;
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-/* ==========================
-   UI: filters
-========================== */
-function buildFilters(rows) {
-  const filtersEl = document.getElementById("filters");
-  filtersEl.innerHTML = "";
-  filtersState = {};
-
-  const cols = new Set();
-  for (const r of rows) Object.keys(r).forEach((k) => cols.add(k));
-  columnNames = Array.from(cols);
-
-  const MAX_UNIQUES_FOR_DROPDOWN = 200;
-
-  for (const col of columnNames) {
-    const uniques = new Set();
-    for (const r of rows) {
-      const v = normalize(r[col]);
-      if (v) uniques.add(v);
-      if (uniques.size > MAX_UNIQUES_FOR_DROPDOWN) break;
-    }
-    if (uniques.size === 0) continue;
-    if (uniques.size > MAX_UNIQUES_FOR_DROPDOWN) continue;
-
-    const wrapper = document.createElement("div");
-    wrapper.className = "filter";
-
-    const label = document.createElement("label");
-    label.innerHTML = `<span>${escapeHtml(col)}</span><span class="pill">${uniques.size}</span>`;
-    wrapper.appendChild(label);
-
-    const select = document.createElement("select");
-    select.className = "select";
-    select.dataset.col = col;
-
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = "All";
-    select.appendChild(opt0);
-
-    const sorted = Array.from(uniques).sort((a, b) => a.localeCompare(b));
-    for (const v of sorted) {
-      const opt = document.createElement("option");
-      opt.value = v;
-      opt.textContent = v;
-      select.appendChild(opt);
-    }
-
-    select.addEventListener("change", () => {
-      const c = select.dataset.col;
-      const val = select.value;
-      if (val) filtersState[c] = val;
-      else delete filtersState[c];
-      applyFilters();
-    });
-
-    wrapper.appendChild(select);
-    filtersEl.appendChild(wrapper);
-  }
-}
-
-function rowMatchesFilters(row) {
-  for (const [col, val] of Object.entries(filtersState)) {
-    if (normalize(row[col]) !== val) return false;
-  }
-
-  if (globalSearchTerm) {
-    const hay = columnNames.map((c) => normalize(row[c]).toLowerCase()).join(" | ");
-    if (!hay.includes(globalSearchTerm)) return false;
-  }
-
-  return true;
-}
-
-/* ==========================
-   Markers (Canvas circle markers)
-========================== */
-function popupHtml(row) {
-  const title = escapeHtml(normalize(row["Company Name"]) || "Company");
-  const type = escapeHtml(normalize(row["Company Type"]) || "—");
-  const loc = `${escapeHtml(normalize(row["City"]))}, ${escapeHtml(normalize(row["Country"]))}`;
-
-  const keys = Object.keys(row);
-  const items = keys
-    .filter((k) => normalize(row[k]) !== "")
-    .map((k) => {
-      const v = escapeHtml(row[k]);
-      return `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v">${v}</div></div>`;
-    })
-    .join("");
-
-  return `
-    <div style="min-width: 260px; max-width: 360px;">
-      <div style="font-weight:950; font-size:14px; margin-bottom:6px;">${title}</div>
-      <div style="font-size:12px; opacity:.75; margin-bottom:10px;">
-        <span style="font-weight:900;">${type}</span> · ${loc}
-      </div>
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        ${items}
-      </div>
-      <style>
-        .kv{display:flex; gap:10px; align-items:flex-start;}
-        .k{min-width: 120px; font-size:11px; opacity:.65;}
-        .v{font-size:12px;}
-      </style>
-    </div>
-  `;
-}
-
-function clearMarkers() {
-  markersLayer.clearLayers();
-}
-
+// Update statistics counters in the UI
 function updateStats() {
   document.getElementById("rowsLoaded").textContent = allRows.length;
   document.getElementById("rowsShown").textContent = filteredRows.length;
 }
 
-function rebuildLegend(rows) {
-  const el = document.getElementById("legendItems");
-  el.innerHTML = "";
+// Build dynamic filter controls based on the data columns and values
+function buildFilters(rows) {
+  const filtersEl = document.getElementById("filters");
+  filtersEl.innerHTML = "";
+  filtersState = {};
+  // Collect column names across rows
+  const cols = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => cols.add(k)));
+  columnNames = Array.from(cols);
 
-  const types = new Set(rows.map((r) => normalize(r["Company Type"]) || "Unknown"));
+  // Build a dropdown for columns with a moderate number of unique values
+  const MAX_UNIQUES = 150;
+  columnNames.forEach(col => {
+    // Determine unique values; skip empty strings
+    const uniques = new Set();
+    for (const r of rows) {
+      const v = normalize(r[col]);
+      if (v) uniques.add(v);
+      if (uniques.size > MAX_UNIQUES) break;
+    }
+    if (uniques.size === 0 || uniques.size > MAX_UNIQUES) return;
+    const wrapper = document.createElement("div");
+    wrapper.className = "filter";
+    const label = document.createElement("label");
+    label.innerHTML = `<span>${escapeHtml(col)}</span><span class="pill">${uniques.size}</span>`;
+    wrapper.appendChild(label);
+    const select = document.createElement("select");
+    select.className = "select";
+    select.dataset.col = col;
+    // Default option
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "All";
+    select.appendChild(opt0);
+    // Sorted options
+    const sorted = Array.from(uniques).sort((a, b) => a.localeCompare(b));
+    sorted.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", () => {
+      const c = select.dataset.col;
+      const val = select.value;
+      if (val) filtersState[c] = val; else delete filtersState[c];
+      applyFilters();
+    });
+    wrapper.appendChild(select);
+    filtersEl.appendChild(wrapper);
+  });
+}
+
+// Determine if a row matches all active filters and global search
+function rowMatchesFilters(row) {
+  // Check per-column filters
+  for (const [col, val] of Object.entries(filtersState)) {
+    if (normalize(row[col]) !== val) return false;
+  }
+  // Check global search
+  if (globalSearchTerm) {
+    const haystack = columnNames.map(c => normalize(row[c]).toLowerCase()).join(" | ");
+    if (!haystack.includes(globalSearchTerm)) return false;
+  }
+  return true;
+}
+
+// Apply filters and update UI
+async function applyFilters() {
+  filteredRows = allRows.filter(rowMatchesFilters);
+  updateStats();
+  updateLegend(filteredRows);
+  // Rebuild points and render
+  await buildPointsData(filteredRows);
+  renderPoints();
+}
+
+// Build the legend from the filtered data
+function updateLegend(rows) {
+  const legendEl = document.getElementById("legend");
+  legendEl.innerHTML = "";
+  if (!rows || rows.length === 0) return;
+  const types = new Set(rows.map(r => normalize(r["Company Type"]) || "Unknown"));
   const sorted = Array.from(types).sort((a, b) => a.localeCompare(b));
-  for (const t of sorted) {
+  const title = document.createElement("div");
+  title.className = "legend-title";
+  title.textContent = "Legend";
+  legendEl.appendChild(title);
+  const itemsEl = document.createElement("div");
+  itemsEl.className = "legend-items";
+  sorted.forEach(t => {
     const color = colorForType(t);
     const item = document.createElement("div");
     item.className = "legend-item";
@@ -287,151 +233,180 @@ function rebuildLegend(rows) {
       <span class="legend-swatch" style="background:${color}"></span>
       <span>${escapeHtml(t)}</span>
     `;
-    el.appendChild(item);
-  }
+    itemsEl.appendChild(item);
+  });
+  legendEl.appendChild(itemsEl);
 }
 
-async function addMarkersForRows(rows) {
-  clearMarkers();
-
-  const GEOCODE_DELAY_MS = 650;
-
-  let added = 0;
-  let missing = 0;
-  const bounds = L.latLngBounds([]);
-
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const city = normalize(r["City"]);
-    const country = normalize(r["Country"]);
-    const type = normalize(r["Company Type"]) || "Unknown";
-
-    if (!city || !country) { missing++; continue; }
-
-    const coords = await geocodeCityCountry(city, country);
-    if (!coords) { missing++; continue; }
-
-    const color = colorForType(type);
-
-    const marker = L.circleMarker([coords.lat, coords.lon], {
-      renderer: initMap._renderer,
-      radius: 6,
-      weight: 2,
-      color: "#ffffff",
-      opacity: 0.9,
-      fillColor: color,
-      fillOpacity: 0.9
-    });
-
-    marker.bindPopup(popupHtml(r), { maxWidth: 420 });
-    marker.addTo(markersLayer);
-
-    bounds.extend([coords.lat, coords.lon]);
-    added++;
-
-    if (i % 4 === 0) await sleep(GEOCODE_DELAY_MS);
+// Build the infobox for a selected company
+function showInfo(row) {
+  const box = document.getElementById("infobox");
+  if (!row) {
+    box.classList.add("hidden");
+    return;
   }
-
-  updateStats();
-
-  if (added > 0 && bounds.isValid()) {
-    map.fitBounds(bounds.pad(0.2));
-  }
-
-  if (missing > 0) toast(`Added ${added} marker(s). ${missing} row(s) missing a location or couldn’t be geocoded.`);
-  else toast(`Added ${added} marker(s).`);
+  box.innerHTML = "";
+  box.classList.remove("hidden");
+  const title = document.createElement("div");
+  title.className = "infobox-title";
+  title.textContent = normalize(row["Company Name"]) || "Company";
+  box.appendChild(title);
+  // Create entries for each non-empty field
+  Object.keys(row).forEach(key => {
+    const v = normalize(row[key]);
+    if (!v) return;
+    const entry = document.createElement("div");
+    entry.className = "infobox-entry";
+    const kEl = document.createElement("div");
+    kEl.className = "key";
+    kEl.textContent = key;
+    const vEl = document.createElement("div");
+    vEl.className = "value";
+    vEl.textContent = v;
+    entry.appendChild(kEl);
+    entry.appendChild(vEl);
+    box.appendChild(entry);
+  });
 }
 
-/* ==========================
-   Filtering application
-========================== */
-function applyFilters() {
-  filteredRows = allRows.filter(rowMatchesFilters);
-  rebuildLegend(filteredRows);
-  updateStats();
-  addMarkersForRows(filteredRows);
+// Fetch Excel file and parse JSON
+async function loadExcel() {
+  toast("Loading data…");
+  const res = await fetch(EXCEL_URL, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Excel: ${res.status} ${res.statusText}`);
+  }
+  const buffer = await res.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  return rows;
 }
 
-/* ==========================
-   Validation
-========================== */
+// Validate that required columns are present
 function validateColumns(rows) {
   const cols = new Set();
-  for (const r of rows) Object.keys(r).forEach((k) => cols.add(k));
-  return REQUIRED.filter((c) => !cols.has(c));
+  rows.forEach(r => Object.keys(r).forEach(k => cols.add(k)));
+  const missing = REQUIRED.filter(c => !cols.has(c));
+  return missing;
 }
 
-/* ==========================
-   Main load
-========================== */
-async function loadAndRender() {
-  toast("Loading Excel…");
-  const buffer = await fetchExcelArrayBuffer(EXCEL_URL);
-  const rows = parseExcel(buffer);
-
-  const missing = validateColumns(rows);
-  if (missing.length) {
-    toast(`Excel missing required columns: ${missing.join(", ")}`, 7000);
-    throw new Error(`Missing required columns: ${missing.join(", ")}`);
+// Build pointsData from rows: geocode if necessary
+async function buildPointsData(rows) {
+  const newPoints = [];
+  let missing = 0;
+  let added = 0;
+  for (const row of rows) {
+    const city = normalize(row["City"]);
+    const country = normalize(row["Country"]);
+    // Use latitude/longitude columns if present
+    let lat = row.Latitude !== undefined ? parseFloat(row.Latitude) : null;
+    let lng = row.Longitude !== undefined ? parseFloat(row.Longitude) : null;
+    if ((lat === null || isNaN(lat)) || (lng === null || isNaN(lng))) {
+      if (!city || !country) {
+        missing++;
+        continue;
+      }
+      const coords = await geocodeCityCountry(city, country);
+      if (!coords) {
+        missing++;
+        continue;
+      }
+      lat = coords.lat;
+      lng = coords.lng;
+    }
+    const type = normalize(row["Company Type"]) || "Unknown";
+    const color = colorForType(type);
+    newPoints.push({ lat, lng, row, color });
+    added++;
   }
+  pointsData = newPoints;
+  if (missing > 0) {
+    toast(`${added} marker(s) added. ${missing} row(s) missing location or could not be geocoded.`);
+  } else {
+    toast(`${added} marker(s) added.`);
+  }
+}
 
-  allRows = rows;
-  filteredRows = rows;
-
-  buildFilters(allRows);
-  rebuildLegend(allRows);
-  updateStats();
-
-  toast("Placing markers… first load may take a moment.");
-  await addMarkersForRows(allRows);
+// Render points onto the globe
+function renderPoints() {
+  if (!globe) return;
+  globe.pointsData(pointsData)
+    .pointLat(p => p.lat)
+    .pointLng(p => p.lng)
+    .pointColor(p => p.color)
+    .pointAltitude(() => 0.02)
+    .pointRadius(() => 0.22)
+    .pointLabel(p => {
+      // Build tooltip content (HTML)
+      const name = escapeHtml(normalize(p.row["Company Name"]) || "Company");
+      const type = escapeHtml(normalize(p.row["Company Type"]) || "—");
+      const loc = `${escapeHtml(normalize(p.row["City"]))}, ${escapeHtml(normalize(p.row["Country"]))}`;
+      return `<div style="font-weight:600; margin-bottom:4px;">${name}</div><div style="font-size:11px; color:#555;">${type} · ${loc}</div>`;
+    })
+    .pointsMerge(false) // disable merge so we can click individual markers
+    .onPointClick((p) => {
+      showInfo(p.row);
+    });
 }
 
 /* ==========================
-   Events
+   Event wiring and initialisation
 ========================== */
-function initEvents() {
-  document.getElementById("btnReload").addEventListener("click", async () => {
-    try { await loadAndRender(); }
-    catch (e) { console.error(e); toast(`Reload failed: ${e.message}`, 6000); }
-  });
 
-  document.getElementById("btnClearCache").addEventListener("click", () => {
-    geocodeCache = {};
-    saveGeocodeCache();
-    toast("Geocode cache cleared for this browser.");
+async function init() {
+  // Initialise sidebar toggle
+  const sidebar = document.getElementById("sidebar");
+  document.getElementById("menuToggle").addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
   });
-
+  // Reset filters button
   document.getElementById("btnResetFilters").addEventListener("click", () => {
     filtersState = {};
     globalSearchTerm = "";
     document.getElementById("globalSearch").value = "";
-    document.querySelectorAll(".filters select").forEach((s) => (s.value = ""));
+    // Reset dropdown selections
+    document.querySelectorAll("#filters select").forEach(sel => sel.value = "");
     applyFilters();
   });
-
-  document.getElementById("globalSearch").addEventListener("input", (e) => {
-    globalSearchTerm = normalize(e.target.value).toLowerCase();
-    window.clearTimeout(initEvents._t);
-    initEvents._t = window.setTimeout(applyFilters, 200);
+  // Global search input (debounced)
+  const searchInput = document.getElementById("globalSearch");
+  searchInput.addEventListener("input", () => {
+    globalSearchTerm = normalize(searchInput.value).toLowerCase();
+    clearTimeout(searchInput._debounce);
+    searchInput._debounce = setTimeout(applyFilters, 200);
   });
-
-  const sidebar = document.getElementById("sidebar");
-  document.getElementById("btnToggleSidebar").addEventListener("click", () => {
-    sidebar.classList.toggle("is-collapsed");
-    setTimeout(() => map.invalidateSize(), 150);
-  });
-}
-
-/* ==========================
-   Boot
-========================== */
-(async function boot() {
+  // Initialise globe instance
+  globe = Globe()(document.getElementById("globeViz"))
+    .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-dark.jpg")
+    .backgroundColor("#f7f7f7")
+    .pointOfView({ lat: 20, lng: 0, altitude: 2 });
+  // Use low auto-rotation speed for subtle movement
+  const controls = globe.controls();
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.rotateSpeed = 0.6;
+  controls.zoomSpeed = 0.6;
+  // Load and render the data
   try {
-    initMap();
-    initEvents();
-    await loadAndRender();
+    allRows = await loadExcel();
+    const missingCols = validateColumns(allRows);
+    if (missingCols.length) {
+      toast(`Excel missing required columns: ${missingCols.join(", ")}`, 6000);
+      throw new Error(`Missing columns: ${missingCols.join(", ")}`);
+    }
+    filteredRows = allRows;
+    buildFilters(allRows);
+    updateLegend(allRows);
+    updateStats();
+    await buildPointsData(allRows);
+    renderPoints();
   } catch (e) {
     console.error(e);
-    toast(`Startup error: ${e.message}`, 8000);
+    toast(`Error loading data: ${e.message}`, 8000);
   }
-})();
+}
+
+// Launch the app when the DOM is ready
+window.addEventListener('DOMContentLoaded', init);

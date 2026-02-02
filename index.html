@@ -1,96 +1,76 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Company Map</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Company Globe Map</title>
 
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+    <!-- External libraries -->
+    <!-- SheetJS: in‑browser Excel parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Globe.gl: ThreeJS‑powered interactive globe -->
+    <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 
-  <!-- SheetJS (read Excel in-browser) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <link rel="stylesheet" href="styles.css" />
-</head>
-
-<body>
-  <header class="topbar">
-    <button id="btnToggleSidebar" class="icon-btn" aria-label="Toggle filters" title="Toggle filters">
-      <span class="icon">☰</span>
-    </button>
-
-    <div class="brand">
-      <div class="brand-title">Company Map</div>
-      <div class="brand-subtitle">Excel → markers, popups, filters</div>
-    </div>
-
-    <div class="top-actions">
-      <button id="btnReload" class="btn">Reload</button>
-      <button id="btnClearCache" class="btn btn-quiet" title="Clears geocoding cache stored in this browser">
-        Clear cache
-      </button>
-    </div>
-  </header>
-
-  <div class="layout">
-    <aside id="sidebar" class="sidebar">
-      <div class="panel">
-        <div class="panel-title">Tips</div>
-        <ul class="help">
-          <li><b>Click a dot</b> to see all row details.</li>
-          <li>Use <b>filters</b> to narrow down the map.</li>
-          <li>Update <code>data/companies.xlsx</code> to update the site.</li>
-        </ul>
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Top navigation bar -->
+    <header class="navbar">
+      <div class="nav-content">
+        <button id="menuToggle" class="menu-btn" aria-label="Toggle filters">☰</button>
+        <div class="logo-dot"></div>
+        <span class="brand-title">Company Globe Map</span>
       </div>
+    </header>
 
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">Filters</div>
-          <button id="btnResetFilters" class="link">Reset</button>
+    <!-- Main layout: sidebar + globe -->
+    <div class="main">
+      <!-- Collapsible sidebar for filters and help -->
+      <aside id="sidebar" class="sidebar collapsed" aria-label="Filters panel">
+        <div class="panel">
+          <h2>How to use</h2>
+          <ul class="help">
+            <li><strong>Click a marker</strong> to see company details.</li>
+            <li>Use the <strong>Search</strong> box to filter any field.</li>
+            <li>Select values in the dropdowns to refine by column.</li>
+            <li>Update <code>data/companies.xlsx</code> and reload the page to refresh the map.</li>
+          </ul>
         </div>
-
-        <div class="search-row">
-          <input id="globalSearch" class="input" placeholder="Search any field…" />
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Filters</h2>
+            <button id="btnResetFilters" class="link" title="Reset all filters">Reset</button>
+          </div>
+          <div class="search-row">
+            <input id="globalSearch" class="input" placeholder="Search any field…" aria-label="Global search" />
+          </div>
+          <div id="filters" class="filters"></div>
         </div>
-
-        <div id="filters" class="filters"></div>
-
-        <div class="stats">
+        <div class="panel stats">
           <div class="stat">
-            <div class="stat-label">Rows</div>
+            <div class="stat-label">Rows loaded</div>
             <div id="rowsLoaded" class="stat-value">—</div>
           </div>
           <div class="stat">
-            <div class="stat-label">Shown</div>
+            <div class="stat-label">Shown on map</div>
             <div id="rowsShown" class="stat-value">—</div>
           </div>
         </div>
+      </aside>
+
+      <!-- Globe container with overlays -->
+      <div class="globe-container">
+        <div id="globeViz"></div>
+        <!-- Legend: lists types and corresponding colours -->
+        <div id="legend" class="legend"></div>
+        <!-- Info box: shows details of selected company -->
+        <div id="infobox" class="infobox hidden"></div>
+        <!-- Toast for status messages -->
+        <div id="toast" class="toast hidden"></div>
       </div>
-    </aside>
+    </div>
 
-    <main class="map-wrap">
-      <div id="map"></div>
-
-      <div id="toast" class="toast hidden"></div>
-
-      <div class="legend" id="legend" aria-label="Legend">
-        <div class="legend-title">Company type</div>
-        <div id="legendItems" class="legend-items"></div>
-      </div>
-    </main>
-  </div>
-
-  <script src="app.js"></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>
