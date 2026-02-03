@@ -351,3 +351,44 @@ html, body {
     transform: translateX(-50%);
   }
 }
+
+/* === HTML Pins (Globe.gl html markers) ===
+   Accessible button pins: pastel head + subtle stem.
+*/
+.pin{
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -100%); /* anchor at tip */
+  pointer-events: auto;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.22));
+}
+.pin:focus-visible{
+  outline: 3px solid rgba(197,16,26,0.35);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.pin__stem{
+  position:absolute;
+  left: 50%;
+  top: 8px;
+  width: 2px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--pin-color) 70%, white);
+  border-radius: 999px;
+  opacity: 0.9;
+}
+.pin__head{
+  position:absolute;
+  left: 50%;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--pin-color) 78%, white);
+  border: 2px solid rgba(255,255,255,0.95);
+  border-radius: 999px;
+}

@@ -31,3 +31,7 @@ This project is a lightweight static web application for visualising company dat
 - The application geocodes `City, Country` using the public Nominatim API. Please respect its usage limits and policies. For large datasets or faster loading, consider adding `Latitude` and `Longitude` columns to your Excel file.
 - All geocode results are stored in your browser’s localStorage. To clear the cache, clear your browser’s storage or open developer tools and remove the `companyGlobe_geocodeCache_v1` key.
 - This project is intentionally free of server dependencies and can run entirely on GitHub Pages or any static file hosting service.
+
+## Marker style
+
+This build uses **HTML pin markers** (instead of 3D cylinders) via Globe.gl `htmlElementsData/htmlElement`, similar to the Globe.gl HTML markers example. Update pin styling in `styles.css` under **HTML Pins**.

@@ -234,24 +234,25 @@ function validateColumns(rows) {
     // Render points on the globe
     function updateGlobe() {
       if (!globe) return;
-      globe.pointsData(pointsData)
-        .pointLat(p => p.lat)
-        .pointLng(p => p.lng)
-        .pointColor(p => p.color)
-        .pointAltitude(() => 0.66)
-        .pointRadius(() => 0.22)
-        .pointsMerge(false)
-        .pointLabel(p => {
-          const name = normalize(p.row['Company Name']) || 'Company';
-          const type = normalize(p.row['Company Type']) || '—';
-          const loc = `${normalize(p.row['City'])}, ${normalize(p.row['Country'])}`;
-          return `<div style="font-weight:600; margin-bottom:4px;">${name}</div><div style="font-size:11px; color:#555;">${type} · ${loc}</div>`;
-        })
-        .onPointClick(p => {
-          // Use $scope.$apply to update Angular state within callback
-          $scope.$apply(() => {
-            vm.selectedRow = p.row;
+      globe.htmlElementsData(pointsData)
+        .htmlElement(p => {
+          const el = document.createElement('button');
+          el.className = 'pin';
+          el.type = 'button';
+          el.setAttribute('aria-label', `Open details for ${p.label || 'company'}`);
+          el.innerHTML = `
+            <span class="pin__stem"></span>
+            <span class="pin__head"></span>
+          `;
+          el.style.setProperty('--pin-color', p.color || '#c5101a');
+          el.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            $scope.$applyAsync(() => {
+              vm.selectedRow = p.row;
+            });
           });
+          return el;
+        });
         });
     }
 
@@ -259,12 +260,10 @@ function validateColumns(rows) {
     async function init() {
       // Initialise globe
       globe = Globe()(document.getElementById('globeViz'))
-        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
         .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--background').trim())
         .pointOfView({ lat: 20, lng: 0, altitude: 2 });
       const controls = globe.controls();
-      const cam = globe.camera();
-      const dist = cam.position.length();  // distance from center
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.rotateSpeed = 0.5;
