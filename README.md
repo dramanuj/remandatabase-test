@@ -34,4 +34,4 @@ This project is a lightweight static web application for visualising company dat
 
 ## Marker style
 
-This build uses **HTML pin markers** (instead of 3D cylinders) via Globe.gl `htmlElementsData/htmlElement`, similar to the Globe.gl HTML markers example. Update pin styling in `styles.css` under **HTML Pins**.
+Markers are implemented using HTML pins via the htmlElementsData/htmlElement API of Globe.gl. The pin styling is defined in `styles.css` under the section "HTML Pins". Modify these styles to adjust the appearance (size, color, etc.).

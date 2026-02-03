@@ -234,17 +234,23 @@ function validateColumns(rows) {
     // Render points on the globe
     function updateGlobe() {
       if (!globe) return;
+      // Render markers as HTML pins instead of 3D cylinders. Each point in pointsData
+      // has lat, lng, row (data) and color fields. Globe.gl will use the lat/lng
+      // properties to position the DOM element on the globe. The htmlElement callback
+      // creates a button element representing a pin. A click handler updates
+      // the selectedRow on the Angular view model.
       globe.htmlElementsData(pointsData)
         .htmlElement(p => {
           const el = document.createElement('button');
-          el.className = 'pin';
-          el.type = 'button';
-          el.setAttribute('aria-label', `Open details for ${p.label || 'company'}`);
+          el.className = "pin";
+          el.type = "button";
+          const companyName = normalize(p.row['Company Name']) || "Company";
+          el.setAttribute("aria-label", `View details for ${companyName}`);
           el.innerHTML = `
             <span class="pin__stem"></span>
             <span class="pin__head"></span>
           `;
-          el.style.setProperty('--pin-color', p.color || '#c5101a');
+          el.style.setProperty('--pin-color', p.color || "#c5101a");
           el.addEventListener('click', (ev) => {
             ev.stopPropagation();
             $scope.$applyAsync(() => {
@@ -252,7 +258,6 @@ function validateColumns(rows) {
             });
           });
           return el;
-        });
         });
     }
 
