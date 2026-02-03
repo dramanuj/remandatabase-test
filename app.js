@@ -238,7 +238,7 @@ function validateColumns(rows) {
         .pointLat(p => p.lat)
         .pointLng(p => p.lng)
         .pointColor(p => p.color)
-        .pointAltitude(() => 0.02)
+        .pointAltitude(() => 0.22)
         .pointRadius(() => 0.22)
         .pointsMerge(false)
         .pointLabel(p => {
@@ -263,6 +263,8 @@ function validateColumns(rows) {
         .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--background').trim())
         .pointOfView({ lat: 20, lng: 0, altitude: 2 });
       const controls = globe.controls();
+      const cam = globe.camera();
+      const dist = cam.position.length();  // distance from center
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.rotateSpeed = 0.5;
