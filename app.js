@@ -265,7 +265,7 @@ function validateColumns(rows) {
     async function init() {
       // Initialise globe
       globe = Globe()(document.getElementById('globeViz'))
-        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-day.jpg')
+        .globeImageUrl('https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57730/land_ocean_ice_2048.png')
         .backgroundColor('#f6f8fb')
         .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--background').trim())
         .atmosphereColor('rgba(120,180,255,0.35)')
