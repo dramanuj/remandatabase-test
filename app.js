@@ -264,10 +264,9 @@ function validateColumns(rows) {
     // Initialisation routine
     async function init() {
       // Initialise globe
-      globe = Globe()(document.getElementById('globeViz'))
-        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-day.jpg')
+         globe = Globe()(document.getElementById('globeViz'))
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
         .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--background').trim())
-        .atmosphereColor('rgba(120,180,255,0.35)')
         .pointOfView({ lat: 20, lng: 0, altitude: 2 });
       const controls = globe.controls();
       controls.enableDamping = true;
