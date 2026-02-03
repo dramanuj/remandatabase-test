@@ -259,7 +259,7 @@ function validateColumns(rows) {
     async function init() {
       // Initialise globe
       globe = Globe()(document.getElementById('globeViz'))
-        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-marble.jpg')
         .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue('--background').trim())
         .pointOfView({ lat: 20, lng: 0, altitude: 2 });
       const controls = globe.controls();
