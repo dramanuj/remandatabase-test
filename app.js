@@ -238,7 +238,7 @@ function validateColumns(rows) {
         .pointLat(p => p.lat)
         .pointLng(p => p.lng)
         .pointColor(p => p.color)
-        .pointAltitude(() => 0.22)
+        .pointAltitude(() => 0.66)
         .pointRadius(() => 0.22)
         .pointsMerge(false)
         .pointLabel(p => {
